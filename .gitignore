@@ -53,6 +53,8 @@ htmlcov/
 .venv/
 venv/
 .env
+# PC마다 다른 마운트 (데이터·외부 저장소가 다른 폴더에 있을 때)
+docker-compose.override.yml
 
 # ── 에디터 · OS ─────────────────────────────────────────────────
 # .vscode/settings.json에 PC마다 다른 절대 경로가 들어 있다.

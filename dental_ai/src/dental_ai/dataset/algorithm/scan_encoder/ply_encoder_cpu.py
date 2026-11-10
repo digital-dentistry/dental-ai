@@ -10,7 +10,7 @@ INT32_MAX = 2 ** 31 - 1
 def ply_encoder_cpu(inp: ScanEncoderInput, out: ScanEncoderOutput) -> bool:
     """binary little-endian PLY 한 파일 (data/ios raw 형식).
 
-        element vertex: float x y z, [uchar red green blue], [int fdi, int label, int instance]
+        element vertex: float x y z, [float nx ny nz], [uchar red green blue], [int fdi, int label, int instance]
         element face:   list uchar int vertex_indices
 
     label은 정점 속성이다 — face로 label을 준 데이터셋도 import할 때 정점 다수결로 바꾼다.
@@ -23,13 +23,15 @@ def ply_encoder_cpu(inp: ScanEncoderInput, out: ScanEncoderOutput) -> bool:
     labelled = inp.fdi is not None
     if n == 0 or any((t is not None) != labelled for t in label_parts):
         return False
-    for t in (inp.colours, *label_parts):
+    for t in (inp.normals, inp.colours, *label_parts):
         if t is not None and t.shape[0] != n:
             return False
     if labelled and any(int(t.min()) < -INT32_MAX or int(t.max()) > INT32_MAX for t in label_parts):
         return False
 
     fields = [("x", "<f4"), ("y", "<f4"), ("z", "<f4")]
+    if inp.normals is not None:
+        fields += [("nx", "<f4"), ("ny", "<f4"), ("nz", "<f4")]
     if inp.colours is not None:
         fields += [("red", "u1"), ("green", "u1"), ("blue", "u1")]
     if labelled:
@@ -37,6 +39,9 @@ def ply_encoder_cpu(inp: ScanEncoderInput, out: ScanEncoderOutput) -> bool:
     vert = np.empty(n, np.dtype(fields))
     xyz = inp.positions.numpy().astype(np.float32)
     vert["x"], vert["y"], vert["z"] = xyz[:, 0], xyz[:, 1], xyz[:, 2]
+    if inp.normals is not None:
+        nrm = inp.normals.numpy().astype(np.float32)
+        vert["nx"], vert["ny"], vert["nz"] = nrm[:, 0], nrm[:, 1], nrm[:, 2]
     if inp.colours is not None:
         rgb = np.round(inp.colours.clamp(0, 1).numpy() * 255).astype(np.uint8)
         vert["red"], vert["green"], vert["blue"] = rgb[:, 0], rgb[:, 1], rgb[:, 2]

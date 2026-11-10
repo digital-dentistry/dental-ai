@@ -44,6 +44,13 @@ class AugmentationParams:
     trim_reach_mm: tuple[float, float] = (2.5, 14.0)
     trim_min_points: int = 5000
 
+    # 합성 색 (synth_colour_cpu).  colour_edge_mm가 None이면 라벨 경계에서 색이 바로 바뀐다 (예전 동작,
+    # segmentation3d와 같은 RNG 순서).  범위를 주면 실제 스캔처럼 경계에서 서서히 바뀐다: 치아 쪽으로 잰
+    # 부호 거리의 sigmoid로 치아 색과 치은 색을 섞는다.  스캔마다 범위 안에서 uniform으로 뽑는다.
+    colour_edge_mm: tuple[float, float] | None = None       # 반반 섞이는 곳 (치아 안쪽 +, mm)
+    colour_edge_width_mm: tuple[float, float] = (1.2, 2.2)  # 10%..90% 폭
+    colour_drift_scale: tuple[float, float] = (1.0, 1.0)    # drift와 치아별 차이 SD 배율 (edge 모드에서만)
+
     # train recipe: 각 단계가 돌 확률
     mirror_p: float = 0.5
     crop_p: float = 0.35

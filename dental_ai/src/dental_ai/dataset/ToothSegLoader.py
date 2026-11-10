@@ -14,6 +14,7 @@ segmentation3d는 dataset 안에서 network 전용 geometry(serialization hierar
     xyz [V,3] float32 mm, nrm [V,3] float16, cls [V] uint8, ins [V] uint8, jaw uint8 (1 upper),
     rgb [V,3] uint8 (실제 색이 있을 때만 — 지금의 오픈 데이터셋에는 없다)
 색이 없는 스캔은 synth_colour_cpu가 in-house 실측 컬러맵으로 치아 / 치은별로 칠한다.
+DDH 데이터셋 릴리스 (S3)는 dental_ai ddh-fetch가 같은 형식의 캐시로 받는다 (DDHLoader.py).
 
     from dental_ai.dataset.ToothSegLoader import (ToothSegConfig, ToothSegDataset, patient_split,
                                                   read_split, tooth_seg_loader)
@@ -209,6 +210,8 @@ class ToothSegDataset(Dataset):
         # 색을 안 쓰면 칠하지도 않는다 (colour_p=0은 RNG를 뽑지 않는다)
         aug = self.config.augmentation
         self._params = aug if "colour" in self.config.features else replace(aug, colour_p=0.0)
+        # normal 없는 DDH 릴리스의 캐시는 nrm이 전부 0이다.  이 feature들이 조용히 0이 되면 안 된다
+        self._needs_normals = "normal" in self.config.features or "curvature" in self.config.features
         # 캐시 여러 개를 섞을 수 있다 (Teeth3DS + in-house).  이름은 그걸 가진 첫 캐시에서 읽는다.
         self._path: dict[str, Path] = {}
         for n in names:
@@ -224,9 +227,12 @@ class ToothSegDataset(Dataset):
 
     def load(self, name: str) -> tuple[ScanSample, bool]:
         with np.load(self._path[name]) as d:
+            nrm = d["nrm"]
+            if self._needs_normals and not nrm.any():
+                raise ValueError(f'{name}: normal이 없는 캐시다.  features에서 "normal", "curvature"를 뺀다')
             rgb = torch.from_numpy(d["rgb"].astype(np.float32) / 255.0) if "rgb" in d.files else None
             sample = ScanSample(torch.from_numpy(d["xyz"].astype(np.float32)),
-                                torch.from_numpy(d["nrm"].astype(np.float32)),
+                                torch.from_numpy(nrm.astype(np.float32)),
                                 torch.from_numpy(d["cls"].astype(np.int64)),
                                 torch.from_numpy(d["ins"].astype(np.int64)), rgb)
             return sample, bool(d["jaw"])
@@ -347,7 +353,8 @@ DEBUG_GINGIVA = (0.62, 0.61, 0.58)
 DEBUG_CONVEX, DEBUG_CONCAVE = (0.165, 0.471, 0.839), (0.922, 0.408, 0.204)    # #2a78d6, #eb6834
 
 
-def _feature_slices(config: ToothSegConfig) -> dict[str, slice]:
+def feature_slices(config: ToothSegConfig) -> dict[str, slice]:
+    """feature 이름 -> item.features에서 그 feature의 열 범위 (예: "normal" -> slice(3, 6))."""
     out, c = {}, 0
     for f in config.features:
         w = FEATURE_CHANNELS[f] * (len(config.curvature_k) if f == "curvature" else 1)
@@ -422,7 +429,7 @@ def render_debug(item: ToothSegItem, config: ToothSegConfig, view: str = "occlus
     """item 하나 -> BGR uint8 그림 (3 x 2 패널: 색, instance, class, offset, normal, 곡률)."""
     import cv2
 
-    sl = _feature_slices(config)
+    sl = feature_slices(config)
     feats = item.features.numpy()
     coord, classes, ins = item.coord.double().numpy(), item.classes.numpy(), item.instances.numpy()
     normals = feats[:, sl["normal"]].astype(np.float64) if "normal" in sl else None

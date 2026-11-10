@@ -7,7 +7,7 @@ name = "dental_ai"
 version = "0.1.0"
 description = "치과 AI 공용 라이브러리 (PyTorch dataloader · loss · network)"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"  # tomllib (dataset/algorithm/download_data/from_ddh.py)
 dependencies = [
     "matplotlib",  # loss 파일마다 들어 있는 시각화 코드, dental_ai preprocess-view
     "numpy",
@@ -23,6 +23,8 @@ dev = ["pytest"]
 # python -m dental_ai.dataset.ToothSegLoader (augmentation 디버그 창).  화면 없는 서버는
 # opencv-python-headless를 깔고 --save로 png를 쓴다.
 debug = ["opencv-python"]
+# dental_ai ddh-fetch (DentalDataHub 데이터셋 릴리스를 S3에서 받는다)
+ddh = ["boto3"]
 
 [tool.setuptools.packages.find]
 # 소스는 dental_ai/src/dental_ai/ 에 둔다 (src 레이아웃).

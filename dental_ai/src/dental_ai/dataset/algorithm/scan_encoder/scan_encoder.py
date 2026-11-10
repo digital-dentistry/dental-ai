@@ -18,6 +18,8 @@ class ScanEncoderInput:
     labels: torch.Tensor | None = None       # [V] scan_decoder.VertexLabel (-1 미분류, 0 치은, 1 치아, 2 스캔바디 ...)
     instances: torch.Tensor | None = None    # [V] 치아 instance 번호 1..K, 치아가 아니면 0
     comments: tuple[str, ...] = ()           # header comment 줄 (출처 등)
+    # 위치 인자로 만드는 곳이 있어 맨 뒤에 둔다.  data/ios raw에는 없다 (전처리가 face에서 다시 구한다)
+    normals: torch.Tensor | None = None      # [V,3] float32.  주면 nx ny nz로 쓴다
 
 
 @dataclass

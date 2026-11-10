@@ -19,7 +19,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/segmentation3d
 
 RUN pip install "torch==${TORCH_VERSION}" --index-url "${TORCH_INDEX_URL}"
-RUN pip install numpy scipy matplotlib pytest
+RUN pip install numpy scipy matplotlib pytest boto3
 
 # SSH 접속(공개키만, 비밀번호 불가) + tmux(접속이 끊겨도 학습이 계속 돌게)
 RUN apt-get update \

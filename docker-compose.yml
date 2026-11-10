@@ -21,12 +21,17 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       TF_CPP_MIN_LOG_LEVEL: 2
+      # dental_ai ddh-fetch: 값은 .env에 둔다.  같은 PC의 DDH는 http://host.docker.internal:9000
+      DDH_S3_ENDPOINT: ${DDH_S3_ENDPOINT:-}
+      DDH_TRAINER_ACCESS_KEY: ${DDH_TRAINER_ACCESS_KEY:-}
+      DDH_TRAINER_SECRET_KEY: ${DDH_TRAINER_SECRET_KEY:-}
 
     ports:
       - "2222:22"                 # ssh -p 2222 root@<이 PC 주소>
 
     volumes:
-      - .:/app
+      - .:/app                    # data/와 외부 저장소가 다른 폴더에 있으면 docker-compose.override.yml로
+                                  # 그 자리에 마운트한다 (PC마다 달라서 git에 넣지 않는다)
       - ssh-host-keys:/etc/ssh/host_keys
 
     working_dir: /app/segmentation3d
