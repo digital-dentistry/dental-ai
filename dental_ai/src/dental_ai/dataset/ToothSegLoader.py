@@ -15,6 +15,7 @@ segmentation3d는 dataset 안에서 network 전용 geometry(serialization hierar
     rgb [V,3] uint8 (실제 색이 있을 때만 — 지금의 오픈 데이터셋에는 없다)
 색이 없는 스캔은 synth_colour_cpu가 in-house 실측 컬러맵으로 치아 / 치은별로 칠한다.
 DDH 데이터셋 릴리스 (S3)는 dental_ai ddh-fetch가 같은 형식의 캐시로 받는다 (DDHLoader.py).
+캐시 없이 item마다 S3에서 받으려면 DDHStream.DDHStreamDataset을 쓴다 (같은 값이 나온다).
 
     from dental_ai.dataset.ToothSegLoader import (ToothSegConfig, ToothSegDataset, patient_split,
                                                   read_split, tooth_seg_loader)
@@ -227,15 +228,19 @@ class ToothSegDataset(Dataset):
 
     def load(self, name: str) -> tuple[ScanSample, bool]:
         with np.load(self._path[name]) as d:
-            nrm = d["nrm"]
-            if self._needs_normals and not nrm.any():
-                raise ValueError(f'{name}: normal이 없는 캐시다.  features에서 "normal", "curvature"를 뺀다')
-            rgb = torch.from_numpy(d["rgb"].astype(np.float32) / 255.0) if "rgb" in d.files else None
-            sample = ScanSample(torch.from_numpy(d["xyz"].astype(np.float32)),
-                                torch.from_numpy(nrm.astype(np.float32)),
-                                torch.from_numpy(d["cls"].astype(np.int64)),
-                                torch.from_numpy(d["ins"].astype(np.int64)), rgb)
-            return sample, bool(d["jaw"])
+            return self.scan_from_arrays(name, {key: d[key] for key in d.files})
+
+    def scan_from_arrays(self, name: str, d: dict[str, np.ndarray]) -> tuple[ScanSample, bool]:
+        """캐시 배열 (npz에서 읽었거나, DDHStream이 메모리에서 만든 것) -> (ScanSample, 위턱인가)."""
+        nrm = d["nrm"]
+        if self._needs_normals and not nrm.any():
+            raise ValueError(f'{name}: normal이 없는 캐시다.  features에서 "normal", "curvature"를 뺀다')
+        rgb = torch.from_numpy(d["rgb"].astype(np.float32) / 255.0) if "rgb" in d else None
+        sample = ScanSample(torch.from_numpy(d["xyz"].astype(np.float32)),
+                            torch.from_numpy(nrm.astype(np.float32)),
+                            torch.from_numpy(d["cls"].astype(np.int64)),
+                            torch.from_numpy(d["ins"].astype(np.int64)), rgb)
+        return sample, bool(d["jaw"])
 
     def __getitem__(self, i: int) -> ToothSegItem:
         cfg = self.config

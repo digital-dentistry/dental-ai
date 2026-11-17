@@ -62,7 +62,7 @@ import torch
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
-from ...ToothSegPreProcessing import fdi_to_class, ordered_instances, real_colour, save_cache
+from ...ToothSegPreProcessing import cache_arrays, fdi_to_class, ordered_instances, real_colour
 from ..augmentation.augmentation import UNKNOWN_TOOTH
 from .download_data import DownloadDataInput, DownloadDataOutput
 
@@ -122,6 +122,8 @@ def ddh_client(endpoint: str | None = None, access_key: str | None = None, secre
             s3={"addressing_style": "path"},
             request_checksum_calculation="when_required",
             response_checksum_validation="when_required",
+            retries={"max_attempts": 5, "mode": "standard"},   # DDHStream: worker 여럿이 epoch마다 다시 받는다
+            connect_timeout=10, read_timeout=120,
         ),
     )
 
@@ -152,8 +154,8 @@ def sample_problem(sample: dict[str, np.ndarray]) -> str | None:
     return None
 
 
-def save_sample(sample: dict[str, np.ndarray], path: Path) -> None:
-    """sample_problem이 None인 샘플 -> npz.  도중에 끊겨도 깨진 캐시가 남지 않게 다 쓴 뒤 옮긴다."""
+def sample_arrays(sample: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """sample_problem이 None인 릴리스 샘플 -> 캐시 배열 (ToothSegPreProcessing.cache_arrays, dtype까지 같다)."""
     jaw_upper = sample_jaw(sample)
     xyz = sample["points"].astype(np.float64) * sample["scale"] + sample["center"]
     tooth = sample["label"] == DDH_TOOTH
@@ -162,9 +164,30 @@ def save_sample(sample: dict[str, np.ndarray], path: Path) -> None:
     ins = ordered_instances(sample["instance"], cls)
     normals = torch.from_numpy(sample["normals"]) if "normals" in sample else torch.zeros(len(xyz), 3)
     rgb = real_colour(torch.from_numpy(sample["colors"].astype(np.float32) / 255.0)) if "colors" in sample else None
+    return cache_arrays(torch.from_numpy(xyz.astype(np.float32)), normals, cls, ins, jaw_upper, rgb)
+
+
+def save_sample(sample: dict[str, np.ndarray], path: Path) -> None:
+    """sample_problem이 None인 샘플 -> npz.  도중에 끊겨도 깨진 캐시가 남지 않게 다 쓴 뒤 옮긴다."""
     part = path.with_suffix(".part.npz")
-    save_cache(part, torch.from_numpy(xyz.astype(np.float32)), normals, cls, ins, jaw_upper, rgb)
+    np.savez(part, **sample_arrays(sample))
     os.replace(part, path)
+
+
+def fetch_sample(cli, dataset: str, version: str, entry: dict) -> dict[str, np.ndarray]:
+    """manifest 한 줄 -> 릴리스 샘플 (메모리).  해시가 manifest와 다르면 DDHError."""
+    data = _get(cli, f"{dataset}/{version}/{entry['npz_path']}")
+    if hashlib.sha256(data).hexdigest() != entry["npz_sha256"]:
+        raise DDHError(f"{entry['npz_path']}: 해시가 manifest와 다르다")
+    with np.load(io.BytesIO(data)) as d:
+        return {key: d[key] for key in d.files}
+
+
+def read_manifest(cli, dataset: str, version: str) -> list[dict]:
+    """릴리스의 manifest.jsonl -> 줄마다 dict.  릴리스가 없으면 DDHError (있는 데이터셋 · 버전을 알려 준다)."""
+    if not (DATASET_NAME.fullmatch(dataset) and VERSION_NAME.fullmatch(version)):
+        raise DDHError(f"{dataset} {version}: 데이터셋은 영문 소문자·숫자·-, 버전은 v<번호>다")
+    return [json.loads(line) for line in _get_manifest(cli, dataset, version).decode().splitlines() if line]
 
 
 def scan_name(entry: dict, jaw_upper: bool) -> str:
@@ -219,11 +242,7 @@ def _download(cli, dataset: str, version: str, root: Path) -> None:
         asset = entry["asset_id"]
         name = done.get(asset)
         if name is None:
-            data = _get(cli, f"{dataset}/{version}/{entry['npz_path']}")
-            if hashlib.sha256(data).hexdigest() != entry["npz_sha256"]:
-                raise DDHError(f"{entry['npz_path']}: 해시가 manifest와 다르다")
-            with np.load(io.BytesIO(data)) as d:
-                sample = {key: d[key] for key in d.files}
+            sample = fetch_sample(cli, dataset, version, entry)
             problem = sample_problem(sample)
             if problem:
                 skipped.append({"asset_id": asset, "patient_pid": entry["patient_pid"], "split": entry["split"],

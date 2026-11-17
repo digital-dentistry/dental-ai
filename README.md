@@ -26,6 +26,11 @@ dental_ai preprocess-view --cache data/ios/teeth3ds/cache --count 0      # 캐�
 # pip install boto3 (컨테이너에는 있다).  환경 변수: DDH_S3_ENDPOINT=http://<서버>:9000, DDH_TRAINER_ACCESS_KEY, DDH_TRAINER_SECRET_KEY
 dental_ai ddh-fetch ios-teethseg-full v1
 
+# 캐시 없이 item마다 S3에서 받기 (dental_ai.dataset.DDHStream.DDHStreamDataset, ToothSegDataset과 같은 item)
+#   DDHStreamDataset("ios-teethseg-full", "v1", "train", ToothSegConfig())  # manifest만 읽고 디스크에 쓰지 않는다
+# 처리량 확인 (worker 6개로 300개 item):
+python -m dental_ai.dataset.DDHStream ios-teethseg-full v1 --items 300 --workers 6
+
 # 받은 스캔을 브라우저에서 돌려 보기 -> runs/ddh_view/<데이터셋>_<버전>/<스캔>.html (dental_ai.visualizer.ddh_viewer)
 # 보기: 3D / Color / Instance / FDI.  HTML 한 파일이라 화면 없는 서버에서 만들고 다른 PC에서 연다
 dental_ai ddh-view ios-teethseg-full v1 --split val --count 4

@@ -78,13 +78,19 @@ def real_colour(colours: torch.Tensor | None) -> np.ndarray | None:
 
 
 # ------------------------------------------------------------------- cache
-def save_cache(path: Path, positions: torch.Tensor, normals: torch.Tensor, classes: np.ndarray,
-               instances: np.ndarray, jaw_upper: bool, rgb: np.ndarray | None) -> None:
+def cache_arrays(positions: torch.Tensor, normals: torch.Tensor, classes: np.ndarray, instances: np.ndarray,
+                 jaw_upper: bool, rgb: np.ndarray | None) -> dict[str, np.ndarray]:
+    """캐시 npz에 들어가는 배열 (dtype까지 같다).  디스크에 쓰지 않고 메모리에서 읽는 DDHStream도 이것을 쓴다."""
     arrays = dict(xyz=positions.numpy().astype(np.float32), nrm=normals.numpy().astype(np.float16),
                   cls=classes.astype(np.uint8), ins=instances.astype(np.uint8), jaw=np.uint8(1 if jaw_upper else 0))
     if rgb is not None:
         arrays["rgb"] = rgb
-    np.savez(path, **arrays)
+    return arrays
+
+
+def save_cache(path: Path, positions: torch.Tensor, normals: torch.Tensor, classes: np.ndarray,
+               instances: np.ndarray, jaw_upper: bool, rgb: np.ndarray | None) -> None:
+    np.savez(path, **cache_arrays(positions, normals, classes, instances, jaw_upper, rgb))
 
 
 def cache_scan(ply_path: Path, out_path: Path) -> tuple[str | None, str | None]:
